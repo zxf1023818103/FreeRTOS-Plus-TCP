@@ -621,16 +621,42 @@
                                 #if ( ipconfigUSE_IPv6 != 0 )
                                     if( xSet.usType == dnsTYPE_AAAA_HOST )
                                     {
+                                        /* [at-project patch] xEndPoint is the endpoint that RECEIVED the query;
+                                         * for a query over IPv4 its ipv6_settings aliases the IPv4 settings (a garbage
+                                         * AAAA). Pick a real IPv6 endpoint: prefer a global (non-fe80::, non-zero
+                                         * prefix), else the link-local. */
+                                        const uint8_t * pucIPv6 = xEndPoint.ipv6_settings.xIPAddress.ucBytes;
+                                        NetworkEndPoint_t * pxIt;
+                                        const uint8_t * pucLL = NULL;
+                                        for( pxIt = FreeRTOS_FirstEndPoint( NULL ); pxIt != NULL; pxIt = FreeRTOS_NextEndPoint( NULL, pxIt ) )
+                                        {
+                                            const uint8_t * a = pxIt->ipv6_settings.xIPAddress.ucBytes;
+                                            if( pxIt->bits.bIPv6 == 0U ) { continue; }
+                                            if( ( a[ 0 ] == 0xfeU ) && ( ( a[ 1 ] & 0xc0U ) == 0x80U ) ) { pucLL = a; }
+                                            else if( ( a[ 0 ] | a[ 1 ] ) != 0U ) { pucLL = NULL; pucIPv6 = a; break; }
+                                        }
+                                        if( pucLL != NULL ) { pucIPv6 = pucLL; }
                                         vSetField16( pxAnswer, LLMNRAnswer_t, usDataLength, ipSIZE_OF_IPv6_ADDRESS );
-                                        ( void ) memcpy( &( pxAnswer->ulIPAddress ), xEndPoint.ipv6_settings.xIPAddress.ucBytes, ipSIZE_OF_IPv6_ADDRESS );
+                                        ( void ) memcpy( &( pxAnswer->ulIPAddress ), pucIPv6, ipSIZE_OF_IPv6_ADDRESS );
                                         /* An extra 12 bytes will be sent compared to an A-record. */
                                         usLength = ( int16_t ) ( sizeof( *pxAnswer ) + uxDistance + ipSIZE_OF_IPv6_ADDRESS - sizeof( pxAnswer->ulIPAddress ) );
                                     }
                                     else
                                 #endif /* ( ipconfigUSE_IPv6 != 0 ) */
                                 {
+                                    /* [at-project patch] mirror of the AAAA fix: a query that arrived over IPv6 has
+                                     * an IPv6 xEndPoint whose ipv4_settings is garbage - use a real IPv4 endpoint. */
+                                    uint32_t ulIP = xEndPoint.ipv4_settings.ulIPAddress;
+                                    if( xEndPoint.bits.bIPv6 != 0U )
+                                    {
+                                        NetworkEndPoint_t * pxIt;
+                                        for( pxIt = FreeRTOS_FirstEndPoint( NULL ); pxIt != NULL; pxIt = FreeRTOS_NextEndPoint( NULL, pxIt ) )
+                                        {
+                                            if( ( pxIt->bits.bIPv6 == 0U ) && ( pxIt->ipv4_settings.ulIPAddress != 0U ) ) { ulIP = pxIt->ipv4_settings.ulIPAddress; break; }
+                                        }
+                                    }
                                     vSetField16( pxAnswer, LLMNRAnswer_t, usDataLength, ( uint16_t ) sizeof( pxAnswer->ulIPAddress ) );
-                                    vSetField32( pxAnswer, LLMNRAnswer_t, ulIPAddress, FreeRTOS_ntohl( xEndPoint.ipv4_settings.ulIPAddress ) );
+                                    vSetField32( pxAnswer, LLMNRAnswer_t, ulIPAddress, FreeRTOS_ntohl( ulIP ) );
                                     usLength = ( int16_t ) ( sizeof( *pxAnswer ) + uxDistance );
                                 }
 

@@ -144,6 +144,11 @@
                                       BaseType_t xExpectedMessageType );
     static BaseType_t xProcessCheckOption( ProcessSet_t * pxSet );
 
+/* at-project patch: NTP server (network byte order) captured from DHCP option 42 (vProcessHandleOption
+ * below), for the SNTP client + the network-up print. 0 = none received; only the first is kept. The
+ * app reads it via `extern uint32_t ulDHCPNtpServerAddress`. */
+    uint32_t ulDHCPNtpServerAddress = 0U;
+
 
 /*-----------------------------------------------------------*/
 
@@ -1097,6 +1102,15 @@
 
                 break;
 
+            case 42U: /* at-project: NTP servers (RFC 2132). Keep the first for the SNTP client. */
+
+                if( pxSet->uxLength >= sizeof( uint32_t ) )
+                {
+                    ( void ) memcpy( &ulDHCPNtpServerAddress, &( pxSet->pucByte[ pxSet->uxIndex ] ), sizeof( uint32_t ) );
+                }
+
+                break;
+
             case dhcpIPv4_SERVER_IP_ADDRESS_OPTION_CODE:
 
                 if( pxSet->uxLength == sizeof( uint32_t ) )
@@ -1525,6 +1539,7 @@
             dhcpIPv4_CLIENT_IDENTIFIER_OPTION_CODE,  7, 1, 0, 0, 0, 0, 0, 0,      /* Client identifier. */
             dhcpIPv4_REQUEST_IP_ADDRESS_OPTION_CODE, 4, 0, 0, 0, 0,               /* The IP address being requested. */
             dhcpIPv4_SERVER_IP_ADDRESS_OPTION_CODE,  4, 0, 0, 0, 0,               /* The IP address of the DHCP server. */
+            dhcpIPv4_PARAMETER_REQUEST_OPTION_CODE,  4, dhcpIPv4_SUBNET_MASK_OPTION_CODE, dhcpIPv4_GATEWAY_OPTION_CODE, dhcpIPv4_DNS_SERVER_OPTIONS_CODE, 42U, /* +NTP (at-project); appended, so the offsets above are unchanged. */
             dhcpOPTION_END_BYTE
         };
         size_t uxOptionsLength = sizeof( ucDHCPRequestOptions );
@@ -1597,7 +1612,7 @@
             dhcpIPv4_MESSAGE_TYPE_OPTION_CODE,       1, dhcpMESSAGE_TYPE_DISCOVER,                                                                        /* Message type option. */
             dhcpIPv4_CLIENT_IDENTIFIER_OPTION_CODE,  7, 1,                                0,                            0, 0, 0, 0, 0,                    /* Client identifier. */
             dhcpIPv4_REQUEST_IP_ADDRESS_OPTION_CODE, 4, 0,                                0,                            0, 0,                             /* The IP address being requested. */
-            dhcpIPv4_PARAMETER_REQUEST_OPTION_CODE,  3, dhcpIPv4_SUBNET_MASK_OPTION_CODE, dhcpIPv4_GATEWAY_OPTION_CODE, dhcpIPv4_DNS_SERVER_OPTIONS_CODE, /* Parameter request option. */
+            dhcpIPv4_PARAMETER_REQUEST_OPTION_CODE,  4, dhcpIPv4_SUBNET_MASK_OPTION_CODE, dhcpIPv4_GATEWAY_OPTION_CODE, dhcpIPv4_DNS_SERVER_OPTIONS_CODE, 42U, /* Parameter request: mask, gateway, DNS, +NTP (at-project). */
             dhcpOPTION_END_BYTE
         };
         size_t uxOptionsLength = sizeof( ucDHCPDiscoverOptions );
