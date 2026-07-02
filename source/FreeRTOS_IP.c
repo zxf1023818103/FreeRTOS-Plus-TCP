@@ -2312,8 +2312,23 @@ void vReturnEthernetFrame( NetworkBufferDescriptor_t * pxNetworkBuffer,
                         ulDestinationIPAddress = pxIPPacket->xIPHeader.ulDestinationIPAddress;
 
                         /* Try to find a MAC address corresponding to the destination IP
-                         * address. */
-                        eResult = eARPGetCacheEntry( &ulDestinationIPAddress, &xMACAddress, &( pxNetworkBuffer->pxEndPoint ) );
+                         * address. NOTE: eARPGetCacheEntry() begins with *ppxEndPoint = NULL and
+                         * leaves it NULL when the destination is unresolvable (e.g. reflecting a
+                         * frame while DHCP is still in progress: no IP/subnet/gateway yet). The
+                         * source-MAC copy below then dereferences pxNetworkBuffer->pxEndPoint with
+                         * no NULL check -> crash. Look up via a LOCAL endpoint so the buffer keeps
+                         * its already-valid endpoint (set by the RX path); only adopt the resolved
+                         * one when eARPGetCacheEntry actually found an endpoint. */
+                        {
+                            NetworkEndPoint_t * pxLookupEndPoint = pxNetworkBuffer->pxEndPoint;
+
+                            eResult = eARPGetCacheEntry( &ulDestinationIPAddress, &xMACAddress, &pxLookupEndPoint );
+
+                            if( pxLookupEndPoint != NULL )
+                            {
+                                pxNetworkBuffer->pxEndPoint = pxLookupEndPoint;
+                            }
+                        }
 
                         if( eResult == eResolutionCacheHit )
                         {
